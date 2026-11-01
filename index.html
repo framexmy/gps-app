@@ -21,7 +21,18 @@
     --bg:#0f1115; --panel:#181b21; --text:#eceef2; --muted:#9aa1ad; --line:#2a2f38;
     --accent:#4c8dff; --accent-ink:#0b0d10; --route:#4c8dff; --shadow:0 6px 24px rgba(0,0,0,.5);
   }
-  .dark-tiles{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}
+  /* ---- Themes ---- */
+  html[data-ui]{--tile-filter:none}
+  html[data-ui="bright"]{--bg:#f6f7f9;--panel:#ffffff;--text:#14171c;--muted:#646b76;--line:#e3e6ea;--accent:#1f6feb;--accent-ink:#fff;--route:#1f6feb;--shadow:0 6px 24px rgba(0,0,0,.12);--tile-filter:none}
+  html[data-ui="dark"]{--bg:#0f1115;--panel:#181b21;--text:#eceef2;--muted:#9aa1ad;--line:#2a2f38;--accent:#4c8dff;--accent-ink:#0b0d10;--route:#4c8dff;--shadow:0 6px 24px rgba(0,0,0,.5);--tile-filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}
+  html[data-ui="pink"]{--bg:#fff0f6;--panel:#fff8fb;--text:#4a1530;--muted:#a05a7c;--line:#f7d3e4;--accent:#ff4fa3;--accent-ink:#fff;--route:#ff4fa3;--shadow:0 6px 24px rgba(255,79,163,.2);--tile-filter:sepia(.35) hue-rotate(290deg) saturate(1.5) brightness(1.03)}
+  html[data-ui="sunshine"]{--bg:#fffbe6;--panel:#fffdf3;--text:#3a2e00;--muted:#8a7630;--line:#f5e7a6;--accent:#f5b700;--accent-ink:#3a2e00;--route:#e89a00;--shadow:0 6px 24px rgba(200,150,0,.2);--tile-filter:sepia(.4) saturate(1.6) brightness(1.04)}
+  html[data-ui="emerald"]{--bg:#07130f;--panel:#0e1f19;--text:#e3f5ec;--muted:#8fb5a3;--line:#1d3a2f;--accent:#10b981;--accent-ink:#04120c;--route:#34d399;--shadow:0 6px 24px rgba(0,0,0,.5);--tile-filter:invert(1) hue-rotate(180deg) sepia(.5) hue-rotate(95deg) saturate(1.6) brightness(.85)}
+  .leaflet-tile-pane{filter:var(--tile-filter)}
+  .themes{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;color:var(--muted)}
+  .sw{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);padding:0;position:relative;overflow:hidden}
+  .sw.on{border-color:var(--text);box-shadow:0 0 0 2px var(--panel) inset}
+  .sw span{position:absolute;inset:0;}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
   #map{position:fixed;inset:0;z-index:0}
@@ -90,6 +101,13 @@
     <button class="mode" data-mode="bike">🚲 Cycle</button>
     <button class="mode" data-mode="foot">🚶 Walk</button>
   </div>
+  <div class="themes">Theme
+    <button class="sw" data-t="pink" title="Pink Girly"><span style="background:linear-gradient(135deg,#fff0f6 50%,#ff4fa3 50%)"></span></button>
+    <button class="sw" data-t="dark" title="Dark"><span style="background:linear-gradient(135deg,#181b21 50%,#4c8dff 50%)"></span></button>
+    <button class="sw" data-t="bright" title="Bright Normal"><span style="background:linear-gradient(135deg,#fff 50%,#1f6feb 50%)"></span></button>
+    <button class="sw" data-t="sunshine" title="Yellow Sunshine"><span style="background:linear-gradient(135deg,#fffbe6 50%,#f5b700 50%)"></span></button>
+    <button class="sw" data-t="emerald" title="Dark Emerald"><span style="background:linear-gradient(135deg,#0e1f19 50%,#10b981 50%)"></span></button>
+  </div>
   <div class="summary" id="summary">
     <div class="big" id="sumTime"></div>
     <div class="muted" id="sumDist"></div>
@@ -117,8 +135,21 @@ const $ = id => document.getElementById(id);
 const map = L.map('map',{zoomControl:false}).setView([3.139,101.6869],12); // Kuala Lumpur default
 // OpenStreetMap tiles (need the page to be on a website, e.g. GitHub Pages; dark mode darkens them)
 const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors',className:dark?'dark-tiles':''}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors'}).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
+
+// ---------- themes ----------
+function applyTheme(t){
+  document.documentElement.dataset.ui=t;
+  document.querySelectorAll('.sw').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  try{localStorage.setItem('gpsTheme',t);}catch(e){}
+  if(routeLine)routeLine.setStyle({color:getComputedStyle(document.documentElement).getPropertyValue('--route').trim()});
+}
+document.querySelectorAll('.sw').forEach(b=>b.onclick=()=>applyTheme(b.dataset.t));
+let savedTheme=null; try{savedTheme=localStorage.getItem('gpsTheme');}catch(e){}
+if(!['pink','dark','bright','sunshine','emerald'].includes(savedTheme))savedTheme=null;
+applyTheme(savedTheme||(dark?'dark':'bright'));
+
 
 let from=null, to=null, mode='car', route=null, routeLine=null, fromMk=null, toMk=null, meMk=null;
 let myPos=null, watchId=null, navigating=false, stepIdx=0, spoken={}, muted=false, lastReroute=0;
