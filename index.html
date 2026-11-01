@@ -21,6 +21,7 @@
     --bg:#0f1115; --panel:#181b21; --text:#eceef2; --muted:#9aa1ad; --line:#2a2f38;
     --accent:#4c8dff; --accent-ink:#0b0d10; --route:#4c8dff; --shadow:0 6px 24px rgba(0,0,0,.5);
   }
+  .dark-tiles{filter:invert(1) hue-rotate(180deg) brightness(.95) contrast(.9)}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
   #map{position:fixed;inset:0;z-index:0}
@@ -114,9 +115,9 @@
 <script>
 const $ = id => document.getElementById(id);
 const map = L.map('map',{zoomControl:false}).setView([3.139,101.6869],12); // Kuala Lumpur default
-// CARTO basemap (OpenStreetMap data) - works when the page is opened as a local file
+// OpenStreetMap tiles (need the page to be on a website, e.g. GitHub Pages; dark mode darkens them)
 const dark = matchMedia('(prefers-color-scheme: dark)').matches;
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark?'dark_all':'voyager'}/{z}/{x}/{y}{r}.png`,{maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap contributors',className:dark?'dark-tiles':''}).addTo(map);
 L.control.zoom({position:'bottomright'}).addTo(map);
 
 let from=null, to=null, mode='car', route=null, routeLine=null, fromMk=null, toMk=null, meMk=null;
