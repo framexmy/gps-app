@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Wayfinder</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f6f7f9; --panel:#ffffff; --text:#14171c; --muted:#646b76; --line:#e3e6ea;
+    --accent:#1f6feb; --accent-ink:#ffffff; --route:#1f6feb; --danger:#d1372e; --shadow:0 6px 24px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1115; --panel:#181b21; --text:#eceef2; --muted:#9aa1ad; --line:#2a2f38;
+      --accent:#4c8dff; --accent-ink:#0b0d10; --route:#4c8dff; --shadow:0 6px 24px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1115; --panel:#181b21; --text:#eceef2; --muted:#9aa1ad; --line:#2a2f38;
+    --accent:#4c8dff; --accent-ink:#0b0d10; --route:#4c8dff; --shadow:0 6px 24px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif}
+  #map{position:fixed;inset:0;z-index:0}
+  .panel{position:fixed;z-index:500;left:16px;right:16px;top:calc(16px + env(safe-area-inset-top));
+    max-width:420px;background:var(--panel);border-radius:16px;box-shadow:var(--shadow);padding:14px;}
+  .row{display:flex;gap:8px;align-items:center;position:relative}
+  .row + .row{margin-top:8px}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .dot.a{background:var(--accent)} .dot.b{background:var(--danger)}
+  input{flex:1;min-width:0;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:var(--bg);color:var(--text);outline:none}
+  input:focus{border-color:var(--accent)}
+  button{font:inherit;cursor:pointer;border:0;border-radius:10px}
+  .icon-btn{background:var(--bg);color:var(--text);border:1px solid var(--line);width:40px;height:40px;flex:none;font-size:16px}
+  .modes{display:flex;gap:6px;margin-top:10px}
+  .mode{flex:1;padding:8px;background:var(--bg);color:var(--muted);border:1px solid var(--line);font-size:14px}
+  .mode.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .go{width:100%;margin-top:10px;padding:12px;background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:15px}
+  .go:disabled{opacity:.5;cursor:default}
+  .suggest{position:absolute;top:44px;left:18px;right:0;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow);z-index:10;overflow:hidden;display:none}
+  .suggest div{padding:10px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .suggest div:last-child{border-bottom:0}
+  .suggest div:hover{background:var(--bg)}
+  .summary{margin-top:12px;display:none}
+  .summary .big{font-size:22px;font-weight:700}
+  .summary .muted{color:var(--muted);font-size:14px}
+  .steps{max-height:32vh;overflow:auto;margin-top:10px;border-top:1px solid var(--line)}
+  .step{display:flex;gap:10px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:14px}
+  .step .ic{width:24px;text-align:center;flex:none}
+  .step .d{margin-left:auto;color:var(--muted);white-space:nowrap}
+  .msg{color:var(--danger);font-size:13px;margin-top:8px;display:none}
+  /* Navigation mode */
+  .nav{position:fixed;z-index:600;left:16px;right:16px;top:calc(16px + env(safe-area-inset-top));max-width:420px;
+    background:var(--accent);color:var(--accent-ink);border-radius:16px;box-shadow:var(--shadow);padding:16px;display:none}
+  .nav .ic{font-size:34px;line-height:1}
+  .nav .dist{font-size:28px;font-weight:700}
+  .nav .txt{font-size:17px;font-weight:500;margin-top:4px}
+  .navbar{position:fixed;z-index:600;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));max-width:420px;
+    background:var(--panel);border-radius:16px;box-shadow:var(--shadow);padding:12px 14px;display:none;align-items:center;gap:12px}
+  .navbar .eta{font-weight:700;font-size:18px}
+  .navbar .muted{color:var(--muted);font-size:13px}
+  .navbar .end{margin-left:auto;background:var(--danger);color:#fff;padding:10px 16px;font-weight:600}
+  .navbar .mute{background:var(--bg);border:1px solid var(--line);color:var(--text);padding:10px 12px}
+  .me{width:18px;height:18px;border-radius:50%;background:var(--accent);border:3px solid #fff;box-shadow:0 0 0 6px rgba(31,111,235,.25)}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="panel" id="panel">
+  <div class="row">
+    <span class="dot a"></span>
+    <input id="from" placeholder="Start (or use my location)" autocomplete="off">
+    <button class="icon-btn" id="locate" title="Use my location">◎</button>
+    <div class="suggest" id="fromS"></div>
+  </div>
+  <div class="row">
+    <span class="dot b"></span>
+    <input id="to" placeholder="Where to?" autocomplete="off">
+    <button class="icon-btn" id="swap" title="Swap">⇅</button>
+    <div class="suggest" id="toS"></div>
+  </div>
+  <div class="modes">
+    <button class="mode on" data-mode="car">🚗 Drive</button>
+    <button class="mode" data-mode="bike">🚲 Cycle</button>
+    <button class="mode" data-mode="foot">🚶 Walk</button>
+  </div>
+  <div class="summary" id="summary">
+    <div class="big" id="sumTime"></div>
+    <div class="muted" id="sumDist"></div>
+    <button class="go" id="start">Start navigation</button>
+    <div class="steps" id="steps"></div>
+  </div>
+  <div class="msg" id="msg"></div>
+</div>
+
+<div class="nav" id="nav">
+  <div style="display:flex;gap:14px;align-items:center">
+    <div class="ic" id="navIc">↑</div>
+    <div><div class="dist" id="navDist"></div><div class="txt" id="navTxt"></div></div>
+  </div>
+</div>
+<div class="navbar" id="navbar">
+  <div><div class="eta" id="navEta"></div><div class="muted" id="navLeft"></div></div>
+  <button class="mute" id="mute">🔊</button>
+  <button class="end" id="end">End</button>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const map = L.map('map',{zoomControl:false}).setView([3.139,101.6869],12); // Kuala Lumpur default
+// CARTO basemap (OpenStreetMap data) - works when the page is opened as a local file
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/rastertiles/${dark?'dark_all':'voyager'}/{z}/{x}/{y}{r}.png`,{maxZoom:20,subdomains:'abcd',attribution:'© OpenStreetMap contributors © CARTO'}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+let from=null, to=null, mode='car', route=null, routeLine=null, fromMk=null, toMk=null, meMk=null;
+let myPos=null, watchId=null, navigating=false, stepIdx=0, spoken={}, muted=false, lastReroute=0;
+
+// ---------- helpers ----------
+const fmtDist = m => m>=1000 ? (m/1000).toFixed(m>=10000?0:1)+' km' : Math.round(m/10)*10+' m';
+const fmtTime = s => { const h=Math.floor(s/3600), m=Math.round((s%3600)/60); return h? `${h} h ${m} min` : `${Math.max(1,m)} min`; };
+function hav(a,b){const R=6371e3,t=Math.PI/180,dLat=(b[0]-a[0])*t,dLon=(b[1]-a[1])*t;
+  const x=Math.sin(dLat/2)**2+Math.cos(a[0]*t)*Math.cos(b[0]*t)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+function showMsg(t){const m=$('msg');m.textContent=t;m.style.display=t?'block':'none';}
+function say(t){ if(muted||!('speechSynthesis' in window))return; speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(t)); }
+
+// ---------- search (OpenStreetMap Nominatim) ----------
+function setupSearch(inputId, boxId, onPick){
+  const input=$(inputId), box=$(boxId); let timer;
+  input.addEventListener('input',()=>{
+    clearTimeout(timer); const q=input.value.trim();
+    if(q.length<3){box.style.display='none';return;}
+    timer=setTimeout(async()=>{
+      try{
+        const c=map.getCenter();
+        const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}&viewbox=${c.lng-1},${c.lat+1},${c.lng+1},${c.lat-1}`);
+        const list=await r.json(); box.innerHTML='';
+        list.forEach(p=>{const d=document.createElement('div');d.textContent=p.display_name;
+          d.onclick=()=>{input.value=p.display_name.split(',').slice(0,2).join(',');box.style.display='none';onPick([+p.lat,+p.lon]);};
+          box.appendChild(d);});
+        box.style.display=list.length?'block':'none';
+      }catch(e){showMsg('Search failed — check your internet connection.');}
+    },400);
+  });
+  document.addEventListener('click',e=>{if(!box.contains(e.target)&&e.target!==input)box.style.display='none';});
+}
+setupSearch('from','fromS',p=>{from=p;placeMarkers();getRoute();});
+setupSearch('to','toS',p=>{to=p;placeMarkers();getRoute();});
+
+// ---------- markers ----------
+function pin(color){return L.divIcon({className:'',html:`<div style="width:16px;height:16px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)"></div>`,iconSize:[22,22],iconAnchor:[11,11]});}
+function placeMarkers(){
+  if(fromMk)map.removeLayer(fromMk); if(toMk)map.removeLayer(toMk);
+  if(from)fromMk=L.marker(from,{icon:pin('#1f6feb')}).addTo(map);
+  if(to)toMk=L.marker(to,{icon:pin('#d1372e')}).addTo(map);
+}
+// Tap the map to set the destination
+map.on('click',e=>{ if(navigating)return; to=[e.latlng.lat,e.latlng.lng]; $('to').value='Dropped pin'; placeMarkers(); getRoute(); });
+
+// ---------- location ----------
+function updateMe(p){
+  myPos=p;
+  if(!meMk) meMk=L.marker(p,{icon:L.divIcon({className:'',html:'<div class="me"></div>',iconSize:[24,24],iconAnchor:[12,12]}),zIndexOffset:1000}).addTo(map);
+  else meMk.setLatLng(p);
+}
+function locate(){
+  if(!navigator.geolocation){showMsg('Your browser does not support location.');return;}
+  navigator.geolocation.getCurrentPosition(pos=>{
+    const p=[pos.coords.latitude,pos.coords.longitude]; updateMe(p);
+    from=p; $('from').value='My location'; placeMarkers(); map.setView(p,15); showMsg(''); getRoute();
+  },()=>showMsg('Location blocked. Allow location access in your browser settings.'),{enableHighAccuracy:true,timeout:10000});
+}
+$('locate').onclick=locate;
+$('swap').onclick=()=>{[from,to]=[to,from];const a=$('from').value;$('from').value=$('to').value;$('to').value=a;placeMarkers();getRoute();};
+
+document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.mode').forEach(x=>x.classList.remove('on'));b.classList.add('on');mode=b.dataset.mode;getRoute();});
+
+// ---------- routing (OSRM on OpenStreetMap servers) ----------
+const ICONS={left:'↰','slight left':'↖','sharp left':'↰',right:'↱','slight right':'↗','sharp right':'↱',straight:'↑',uturn:'↶'};
+function stepText(s){
+  const m=s.maneuver, name=s.name||'the road', mod=m.modifier||'';
+  switch(m.type){
+    case 'depart': return `Head ${dirWord(m.bearing_after)} on ${name}`;
+    case 'arrive': return 'You have arrived';
+    case 'roundabout': case 'rotary': return `At the roundabout, take exit ${m.exit||''} onto ${name}`;
+    case 'merge': return `Merge ${mod} onto ${name}`;
+    case 'on ramp': return `Take the ramp onto ${name}`;
+    case 'off ramp': return `Take the exit toward ${name}`;
+    case 'fork': return `Keep ${mod} at the fork onto ${name}`;
+    case 'continue': case 'new name': return `Continue onto ${name}`;
+    default: return mod==='straight' ? `Continue straight onto ${name}` : mod==='uturn' ? `Make a U-turn onto ${name}` : `Turn ${mod} onto ${name}`;
+  }
+}
+function stepIcon(s){const t=s.maneuver.type;if(t==='arrive')return '🏁';if(t==='depart')return '●';if(t==='roundabout'||t==='rotary')return '⟳';return ICONS[s.maneuver.modifier]||'↑';}
+function dirWord(b){return ['north','northeast','east','southeast','south','southwest','west','northwest'][Math.round(b/45)%8];}
+
+async function getRoute(fitView=true){
+  if(!from||!to)return;
+  showMsg('');
+  const url=`https://routing.openstreetmap.de/routed-${mode}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=full&geometries=geojson&steps=true`;
+  try{
+    const r=await fetch(url); const j=await r.json();
+    if(j.code!=='Ok'||!j.routes.length){showMsg('No route found between those places.');return;}
+    route=j.routes[0];
+    route.coords=route.geometry.coordinates.map(c=>[c[1],c[0]]);
+    route.steps=route.legs[0].steps;
+    if(routeLine)map.removeLayer(routeLine);
+    routeLine=L.polyline(route.coords,{color:getComputedStyle(document.documentElement).getPropertyValue('--route').trim()||'#1f6feb',weight:7,opacity:.85}).addTo(map);
+    if(fitView&&!navigating)map.fitBounds(routeLine.getBounds(),{paddingTopLeft:[20,330],paddingBottomRight:[20,20]});
+    renderSummary();
+  }catch(e){showMsg('Could not reach the routing service — check your internet connection.');}
+}
+function renderSummary(){
+  $('summary').style.display='block';
+  $('sumTime').textContent=fmtTime(route.duration);
+  $('sumDist').textContent=fmtDist(route.distance)+' · arrive '+new Date(Date.now()+route.duration*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const box=$('steps'); box.innerHTML='';
+  route.steps.forEach(s=>{const d=document.createElement('div');d.className='step';
+    d.innerHTML=`<span class="ic">${stepIcon(s)}</span><span></span><span class="d">${s.distance?fmtDist(s.distance):''}</span>`;
+    d.children[1].textContent=stepText(s);
+    d.onclick=()=>map.setView([s.maneuver.location[1],s.maneuver.location[0]],17);
+    box.appendChild(d);});
+}
+
+// ---------- turn-by-turn navigation ----------
+$('start').onclick=()=>{
+  if(!navigator.geolocation){showMsg('Navigation needs location access.');return;}
+  navigating=true; stepIdx=1; spoken={};
+  $('panel').style.display='none'; $('nav').style.display='block'; $('navbar').style.display='flex';
+  say(stepText(route.steps[0]));
+  watchId=navigator.geolocation.watchPosition(onMove,()=>showNav('↯','','Waiting for GPS signal…'),{enableHighAccuracy:true,maximumAge:1000});
+  if(myPos)onMove({coords:{latitude:myPos[0],longitude:myPos[1]}});
+};
+$('end').onclick=endNav;
+$('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊';if(muted)speechSynthesis.cancel();};
+
+function endNav(){
+  navigating=false; if(watchId!=null)navigator.geolocation.clearWatch(watchId); watchId=null;
+  $('panel').style.display='block'; $('nav').style.display='none'; $('navbar').style.display='none';
+  if(routeLine)map.fitBounds(routeLine.getBounds(),{paddingTopLeft:[20,330]});
+}
+function showNav(ic,dist,txt){$('navIc').textContent=ic;$('navDist').textContent=dist;$('navTxt').textContent=txt;}
+
+function distToRoute(p){ // nearest distance from position to route vertices (fine-grained enough for OSRM geometry)
+  let best=Infinity,idx=0; route.coords.forEach((c,i)=>{const d=hav(p,c);if(d<best){best=d;idx=i;}}); return {d:best,i:idx};
+}
+async function onMove(pos){
+  const p=[pos.coords.latitude,pos.coords.longitude]; updateMe(p);
+  map.setView(p,Math.max(map.getZoom(),17),{animate:true});
+
+  // Off route? Recalculate from here (at most every 10 s)
+  const near=distToRoute(p);
+  if(near.d>50 && Date.now()-lastReroute>10000){
+    lastReroute=Date.now(); say('Rerouting'); showNav('⟲','','Rerouting…');
+    from=p; await getRoute(false); stepIdx=1; spoken={}; return;
+  }
+  // Advance past steps we've reached
+  while(stepIdx<route.steps.length-1){
+    const m=route.steps[stepIdx].maneuver.location;
+    if(hav(p,[m[1],m[0]])<20) stepIdx++; else break;
+  }
+  const s=route.steps[stepIdx], m=[s.maneuver.location[1],s.maneuver.location[0]], d=hav(p,m);
+  showNav(stepIcon(s),fmtDist(d),stepText(s));
+
+  // Voice prompts: once ~300 m ahead, once ~40 m ahead
+  if(d<300&&d>80&&!spoken[stepIdx+'f']){spoken[stepIdx+'f']=1;say(`In ${fmtDist(d)}, ${stepText(s)}`);}
+  if(d<40&&!spoken[stepIdx+'n']){spoken[stepIdx+'n']=1;say(stepText(s));}
+
+  // Remaining distance & ETA (rough: proportion of route left)
+  let left=d; for(let i=stepIdx;i<route.steps.length;i++)left+=route.steps[i].distance;
+  const secs=route.duration*(left/route.distance);
+  $('navEta').textContent=new Date(Date.now()+secs*1000).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  $('navLeft').textContent=`${fmtTime(secs)} · ${fmtDist(left)}`;
+
+  if(s.maneuver.type==='arrive'&&d<25){say('You have arrived');showNav('🏁','','You have arrived');setTimeout(endNav,4000);}
+}
+
+// Try to centre on the user at start (silently if they decline)
+if(navigator.geolocation){navigator.geolocation.getCurrentPosition(pos=>{const p=[pos.coords.latitude,pos.coords.longitude];updateMe(p);from=p;$('from').value='My location';map.setView(p,14);},()=>{});}
+</script>
+</body>
+</html>
